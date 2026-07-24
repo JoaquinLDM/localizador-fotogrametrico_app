@@ -2,7 +2,7 @@
   "name": "Localizador Fotogramétrico",
   "short_name": "Localizador",
   "description": "Triangulación de puntos en campo mediante fotos, GPS y brújula",
-  "start_url": "./localizador-fotogrametrico.html",
+  "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",
