@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#0f172a">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<title>Localizador Fotogramétrico</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/exif-js/2.3.0/exif.min.js"></script>
+<style>
+  :root{
+    --bg:#0f172a; --bg2:#152238; --panel:#1a2942; --accent:#06b6d4; --accent2:#22d3ee;
+    --text:#e2e8f0; --muted:#7c8ba1; --danger:#f87171; --ok:#34d399;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font-family:-apple-system,Roboto,Segoe UI,sans-serif;overflow:hidden;}
+  #app{display:flex;flex-direction:column;height:100vh;}
+  header{padding:10px 14px;background:var(--bg2);border-bottom:1px solid #223354;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;}
+  header h1{font-size:15px;margin:0;font-weight:600;letter-spacing:.3px;}
+  header h1 span{color:var(--accent2);}
+  nav{display:flex;background:var(--bg2);flex-shrink:0;}
+  nav button{flex:1;padding:11px 4px;background:none;border:none;color:var(--muted);font-size:13px;font-weight:600;border-bottom:2px solid transparent;}
+  nav button.active{color:var(--accent2);border-bottom:2px solid var(--accent2);}
+  main{flex:1;overflow:hidden;position:relative;}
+  .tab{display:none;height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch;}
+  .tab.active{display:block;}
+
+  /* CAPTURA */
+  #captureView{position:relative;height:100%;background:#000;}
+  #video{width:100%;height:100%;object-fit:cover;display:block;}
+  #captureCanvas{display:none;}
+  .crosshair{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);pointer-events:none;}
+  .crosshair svg{width:110px;height:110px;opacity:.85;}
+  .hud{position:absolute;top:12px;left:12px;right:12px;background:rgba(15,23,42,.75);backdrop-filter:blur(4px);padding:10px 12px;border-radius:10px;font-size:12.5px;line-height:1.5;border:1px solid #223354;}
+  .hud b{color:var(--accent2);}
+  .shutter{position:absolute;bottom:26px;left:50%;transform:translateX(-50%);width:70px;height:70px;border-radius:50%;background:var(--accent);border:4px solid #fff;box-shadow:0 2px 12px rgba(0,0,0,.5);}
+  .badge{position:absolute;top:12px;right:12px;background:var(--accent);color:#04222b;font-weight:700;font-size:12px;padding:4px 10px;border-radius:20px;}
+  .zoomBox{position:absolute;bottom:110px;left:50%;transform:translateX(-50%);width:70%;max-width:280px;background:rgba(15,23,42,.75);backdrop-filter:blur(4px);border-radius:20px;padding:8px 14px;display:flex;align-items:center;gap:8px;border:1px solid #223354;}
+  .zoomBox input[type=range]{flex:1;accent-color:var(--accent);}
+
+  /* GENERAL */
+  .pad{padding:14px;}
+  .card{background:var(--panel);border:1px solid #223354;border-radius:12px;padding:14px;margin-bottom:12px;}
+  .card h3{margin:0 0 8px;font-size:13px;color:var(--accent2);text-transform:uppercase;letter-spacing:.5px;}
+  .btn{display:block;width:100%;padding:12px;border:none;border-radius:10px;background:var(--accent);color:#04222b;font-weight:700;font-size:14px;text-align:center;}
+  .btn.secondary{background:#223354;color:var(--text);}
+  .btn.danger{background:transparent;color:var(--danger);border:1px solid var(--danger);}
+  .btn:disabled{opacity:.4;}
+  input[type=file]{display:none;}
+  .row{display:flex;gap:8px;}
+  .row>*{flex:1;}
+  label{font-size:12px;color:var(--muted);display:block;margin:8px 0 4px;}
+  input[type=number], input[type=range]{width:100%;padding:9px;border-radius:8px;border:1px solid #2c4066;background:#0f1c33;color:var(--text);font-size:14px;}
+  .imgWrap{position:relative;width:100%;border-radius:10px;overflow:hidden;margin:10px 0;background:#000;}
+  .imgWrap img{width:100%;display:block;}
+  .marker{position:absolute;width:22px;height:22px;border:2px solid var(--accent);border-radius:50%;transform:translate(-50%,-50%);pointer-events:none;box-shadow:0 0 0 2px rgba(0,0,0,.5);}
+  .tag{display:inline-block;font-size:11px;padding:2px 8px;border-radius:12px;margin-top:4px;font-weight:600;}
+  .tag.ok{background:rgba(52,211,153,.15);color:var(--ok);}
+  .tag.warn{background:rgba(248,113,113,.15);color:var(--danger);}
+  .captItem{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #223354;font-size:13px;}
+  .captItem:last-child{border-bottom:none;}
+  .captItem .del{color:var(--danger);font-size:12px;padding:4px 10px;}
+  #map{height:260px;border-radius:12px;margin-bottom:12px;}
+  .resultBox{background:linear-gradient(135deg,#0e3a45,#0f2942);border:1px solid var(--accent);border-radius:12px;padding:16px;text-align:center;}
+  .resultBox .coords{font-size:17px;font-weight:700;color:var(--accent2);margin:6px 0;}
+  .muted{color:var(--muted);font-size:12px;}
+  a.maplink{color:var(--accent2);font-size:13px;font-weight:600;}
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1>📍 Localizador <span>Fotogramétrico</span></h1>
+    <span class="badge" id="countBadge">0 tomas</span>
+  </header>
+  <nav>
+    <button class="active" data-tab="captura">Cámara</button>
+    <button data-tab="galeria">Galería</button>
+    <button data-tab="resultados">Resultados</button>
+  </nav>
+  <main>
+
+    <!-- TAB CAPTURA -->
+    <section class="tab active" id="tab-captura">
+      <div id="captureView">
+        <video id="video" autoplay playsinline muted></video>
+        <canvas id="captureCanvas"></canvas>
+        <div class="hud">
+          <div>Azimut: <b id="hudAz">esperando…</b></div>
+          <div>Lat: <b id="hudLat">…</b> · Lon: <b id="hudLon">…</b></div>
+          <div id="hudWarnCam" class="muted" style="color:#f87171;"></div>
+          <div id="hudWarnGps" class="muted"></div>
+        </div>
+        <div class="crosshair">
+          <svg viewBox="0 0 120 120">
+            <circle cx="60" cy="60" r="38" stroke="#ef4444" stroke-width="2" fill="none"/>
+            <circle cx="60" cy="60" r="8" stroke="#ef4444" stroke-width="2" fill="none"/>
+            <line x1="60" y1="0" x2="60" y2="120" stroke="#ef4444" stroke-width="1.5"/>
+            <line x1="0" y1="60" x2="120" y2="60" stroke="#ef4444" stroke-width="1.5"/>
+          </svg>
+        </div>
+        <div class="shutter" id="btnShutter"></div>
+        <div class="zoomBox" id="zoomBox" style="display:none;">
+          <span style="font-size:11px;">1x</span>
+          <input type="range" id="zoomSlider" min="1" max="3" step="0.1" value="1">
+          <span style="font-size:11px;" id="zoomMaxLabel">3x</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB GALERIA -->
+    <section class="tab" id="tab-galeria">
+      <div class="pad">
+        <div class="card">
+          <h3>Importar foto existente</h3>
+          <p class="muted">Se leen las coordenadas GPS del EXIF. Si la foto también tiene dirección de brújula guardada (GPSImgDirection), se usa automáticamente; si no, la introduces a mano.</p>
+          <label class="btn secondary" for="fileInput">Elegir foto de galería</label>
+          <input type="file" id="fileInput" accept="image/*">
+        </div>
+        <div id="galeriaPreview"></div>
+      </div>
+    </section>
+
+    <!-- TAB RESULTADOS -->
+    <section class="tab" id="tab-resultados">
+      <div class="pad">
+        <div id="map"></div>
+        <div class="card">
+          <h3>Tomas registradas</h3>
+          <div id="listaCapturas"><p class="muted">Aún no hay tomas.</p></div>
+        </div>
+        <button class="btn" id="btnTriangular">Calcular punto</button>
+        <div id="resultado" style="margin-top:12px;"></div>
+        <div class="card" style="margin-top:16px;">
+          <h3>Histórico de resultados guardados</h3>
+          <div id="listaHistorial"><p class="muted">Aún no has calculado ningún punto.</p></div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<script>
+// ---------- ESTADO ----------
+let capturas = []; // {id, lat, lon, azimut, fuente, precision, foto}
+let historial = []; // {id, timestamp, lat, lon, numCapturas, capturas:[{lat,lon,azimut,fuente,foto}]}
+let map, capturasLayer = L.layerGroup(), resultLayer = L.layerGroup();
+let currentHeading = null, currentPos = null;
+let stream = null;
+
+// ---------- PERSISTENCIA (localStorage: funciona como app independiente, fuera de Claude) ----------
+async function guardarCapturas(){
+  try{ localStorage.setItem('capturas-list', JSON.stringify(capturas)); }
+  catch(e){ console.error('Error guardando capturas (¿almacenamiento lleno?)', e); }
+}
+async function cargarCapturas(){
+  try{
+    const v = localStorage.getItem('capturas-list');
+    if(v) capturas = JSON.parse(v);
+  }catch(e){ capturas = []; }
+  refrescarTodo();
+}
+async function guardarHistorial(){
+  try{ localStorage.setItem('resultados-historial', JSON.stringify(historial)); }
+  catch(e){ console.error('Error guardando historial (¿almacenamiento lleno?)', e); }
+}
+async function cargarHistorial(){
+  try{
+    const v = localStorage.getItem('resultados-historial');
+    if(v) historial = JSON.parse(v);
+  }catch(e){ historial = []; }
+  renderHistorial();
+}
+
+function stopCameraTracks(){
+  if(stream){
+    stream.getTracks().forEach(t=>t.stop());
+    stream = null;
+    document.getElementById('zoomBox').style.display = 'none';
+  }
+}
+
+document.addEventListener('visibilitychange', ()=>{
+  if(document.hidden){
+    stopCameraTracks();
+  } else {
+    const enCamara = document.querySelector('nav button[data-tab="captura"]').classList.contains('active');
+    if(enCamara && !stream) initCamera();
+  }
+});
+window.addEventListener('pagehide', stopCameraTracks);
+
+// ---------- NAVEGACIÓN ----------
+document.querySelectorAll('nav button').forEach(b=>{
+  b.onclick = ()=>{
+    document.querySelectorAll('nav button').forEach(x=>x.classList.remove('active'));
+    document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+    b.classList.add('active');
+    document.getElementById('tab-'+b.dataset.tab).classList.add('active');
+    if(b.dataset.tab==='resultados') setTimeout(()=>map.invalidateSize(),100);
+    if(b.dataset.tab==='captura' && !stream){
+      initCamera();
+    } else if(b.dataset.tab!=='captura'){
+      stopCameraTracks(); // libera la cámara mientras miras Galería o Resultados
+    }
+  };
+});
+
+// ---------- CAMARA EN VIVO ----------
+async function initCamera(){
+  try{
+    stream = await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}, audio:false});
+    document.getElementById('video').srcObject = stream;
+    setupZoom();
+  }catch(e){
+    document.getElementById('hudWarnCam').textContent = 'Cámara: '+e.name+' — '+e.message;
+    // reintento sin forzar cámara trasera, por si el fallo es de constraints
+    try{
+      stream = await navigator.mediaDevices.getUserMedia({video:true, audio:false});
+      document.getElementById('video').srcObject = stream;
+      document.getElementById('hudWarnCam').textContent = 'Cámara activa (modo genérico, sin forzar trasera).';
+      document.getElementById('hudWarnCam').style.color = '#34d399';
+      setupZoom();
+    }catch(e2){
+      document.getElementById('hudWarnCam').textContent += ' | Reintento genérico también falló: '+e2.name;
+    }
+  }
+}
+
+function setupZoom(){
+  const track = stream.getVideoTracks()[0];
+  const zoomBox = document.getElementById('zoomBox');
+  const slider = document.getElementById('zoomSlider');
+  const video = document.getElementById('video');
+  const caps = track.getCapabilities ? track.getCapabilities() : {};
+  zoomBox.style.display = 'flex';
+  if(caps.zoom){
+    // zoom óptico/híbrido real soportado por el hardware
+    slider.min = caps.zoom.min;
+    slider.max = caps.zoom.max;
+    slider.step = caps.zoom.step || 0.1;
+    slider.value = caps.zoom.min;
+    document.getElementById('zoomMaxLabel').textContent = caps.zoom.max.toFixed(1)+'x';
+    slider.oninput = ()=>{
+      track.applyConstraints({advanced:[{zoom: Number(slider.value)}]}).catch(()=>{});
+    };
+  } else {
+    // sin soporte de hardware: zoom digital por CSS (recorta, no mejora resolución,
+    // pero ayuda a encuadrar el punto exacto con más precisión visual)
+    slider.min = 1; slider.max = 3; slider.step = 0.1; slider.value = 1;
+    document.getElementById('zoomMaxLabel').textContent = '3x (digital)';
+    slider.oninput = ()=>{
+      video.style.transform = 'scale('+slider.value+')';
+    };
+  }
+}
+
+function computeTiltCompensatedHeading(alpha, beta, gamma){
+  // Método estándar de compensación por inclinación (rotación completa en vez de solo alpha).
+  // Necesario porque al encuadrar con la cámara el móvil casi nunca está plano.
+  const degToRad = Math.PI/180;
+  const x = (beta||0) * degToRad;
+  const y = (gamma||0) * degToRad;
+  const z = (alpha||0) * degToRad;
+  const cX = Math.cos(x), cY = Math.cos(y), cZ = Math.cos(z);
+  const sX = Math.sin(x), sY = Math.sin(y), sZ = Math.sin(z);
+  const Vx = -cZ*sY - sZ*sX*cY;
+  const Vy = -sZ*sY + cZ*sX*cY;
+  let heading = Math.atan2(Vx, Vy) * (180/Math.PI);
+  if(heading < 0) heading += 360;
+  return heading;
+}
+
+function handleOrientation(e){
+  let heading = null;
+  if (e.webkitCompassHeading !== undefined) {
+    heading = e.webkitCompassHeading; // iOS ya da heading compensado de fábrica
+  } else if (e.alpha !== null && e.beta !== null && e.gamma !== null) {
+    heading = computeTiltCompensatedHeading(e.alpha, e.beta, e.gamma);
+  }
+  if(heading !== null){
+    currentHeading = (heading + 360) % 360;
+    document.getElementById('hudAz').textContent = currentHeading.toFixed(1)+'°';
+  }
+}
+window.addEventListener('deviceorientationabsolute', handleOrientation, true);
+window.addEventListener('deviceorientation', handleOrientation, true);
+
+function watchGPS(){
+  if(!navigator.geolocation) return;
+  navigator.geolocation.watchPosition(pos=>{
+    currentPos = pos.coords;
+    document.getElementById('hudLat').textContent = pos.coords.latitude.toFixed(6);
+    document.getElementById('hudLon').textContent = pos.coords.longitude.toFixed(6);
+  }, err=>{ document.getElementById('hudWarnGps').textContent = 'GPS: '+err.message; },
+  {enableHighAccuracy:true, maximumAge:2000, timeout:8000});
+}
+
+function comprimirCanvas(canvas, maxW){
+  let w = canvas.width, h = canvas.height;
+  if(w > maxW){ h = Math.round(h*(maxW/w)); w = maxW; }
+  const out = document.createElement('canvas');
+  out.width = w; out.height = h;
+  out.getContext('2d').drawImage(canvas, 0, 0, w, h);
+  return out.toDataURL('image/jpeg', 0.6);
+}
+
+document.getElementById('btnShutter').onclick = ()=>{
+  if(!currentPos || currentHeading===null){
+    document.getElementById('hudWarnGps').textContent = 'Esperando datos precisos de GPS y brújula…';
+    return;
+  }
+  const video = document.getElementById('video');
+  const canvas = document.getElementById('captureCanvas');
+  let foto = null;
+  if(video.videoWidth){
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    canvas.getContext('2d').drawImage(video, 0, 0);
+    foto = comprimirCanvas(canvas, 480);
+  }
+  const c = {
+    id: Date.now(),
+    lat: currentPos.latitude,
+    lon: currentPos.longitude,
+    azimut: currentHeading,
+    fuente: 'cámara',
+    precision: currentPos.accuracy ? currentPos.accuracy.toFixed(0)+' m' : '—',
+    foto
+  };
+  capturas.push(c);
+  guardarCapturas();
+  refrescarTodo();
+  flashShutter();
+};
+function flashShutter(){
+  const v = document.getElementById('captureView');
+  v.style.filter = 'brightness(2)';
+  setTimeout(()=>v.style.filter='',120);
+}
+
+// ---------- IMPORTAR DE GALERIA ----------
+function dmsToDecimal(dms, ref){
+  if(!dms) return null;
+  const val = dms[0] + dms[1]/60 + dms[2]/3600;
+  return (ref === 'S' || ref === 'W') ? -val : val;
+}
+
+document.getElementById('fileInput').onchange = (e)=>{
+  const file = e.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = (ev)=>{
+    const dataUrl = ev.target.result;
+    EXIF.getData(file, function(){
+      const lat = dmsToDecimal(EXIF.getTag(this,'GPSLatitude'), EXIF.getTag(this,'GPSLatitudeRef'));
+      const lon = dmsToDecimal(EXIF.getTag(this,'GPSLongitude'), EXIF.getTag(this,'GPSLongitudeRef'));
+      let dir = EXIF.getTag(this,'GPSImgDirection');
+      const focal35 = EXIF.getTag(this,'FocalLengthIn35mmFilm') || 35;
+      dir = (dir !== undefined && dir !== null) ? Number(dir) : null;
+      renderGaleriaPreview(dataUrl, lat, lon, dir, focal35);
+    });
+  };
+  reader.readAsDataURL(file);
+  e.target.value = '';
+};
+
+function renderGaleriaPreview(dataUrl, lat, lon, dirExif, focal35){
+  const fovH = 2 * Math.atan(36/(2*focal35)) * (180/Math.PI); // campo de visión horizontal aprox
+  const wrap = document.createElement('div');
+  wrap.className = 'card';
+  const sinGPS = (lat===null || lon===null);
+  wrap.innerHTML = `
+    <h3>Foto importada</h3>
+    ${sinGPS ? '<p class="muted" style="color:var(--danger)">⚠ Esta foto no tiene coordenadas GPS en el EXIF. No se puede usar.</p>' : `
+    <div class="imgWrap" id="imgWrap"><img src="${dataUrl}"><div class="marker" id="marker" style="left:50%;top:50%;"></div></div>
+    <p class="muted">Toca sobre el punto exacto que quieres localizar (por defecto, el centro).</p>
+    <label>Latitud / Longitud (EXIF)</label>
+    <p style="font-size:13px">${lat.toFixed(6)}, ${lon.toFixed(6)}</p>
+    ${dirExif!==null ? `<span class="tag ok">Dirección EXIF: ${dirExif.toFixed(1)}°</span>` : `
+      <label>Esta foto no tiene brújula guardada. Introduce el rumbo aproximado al que apuntaba la cámara (0=Norte, 90=Este):</label>
+      <input type="number" id="azimutManual" min="0" max="359" value="0">
+      <span class="tag warn">Rumbo manual — menos preciso</span>
+    `}
+    <button class="btn" id="btnAddGaleria" style="margin-top:12px;">Añadir esta toma</button>
+    `}
+  `;
+  document.getElementById('galeriaPreview').innerHTML = '';
+  document.getElementById('galeriaPreview').appendChild(wrap);
+  if(sinGPS) return;
+
+  const imgWrap = document.getElementById('imgWrap');
+  const marker = document.getElementById('marker');
+  let offsetPct = {x:0, y:0}; // desviación respecto al centro, en % del ancho
+
+  imgWrap.onclick = (ev)=>{
+    const rect = imgWrap.getBoundingClientRect();
+    const xPct = ((ev.clientX - rect.left)/rect.width)*100;
+    const yPct = ((ev.clientY - rect.top)/rect.height)*100;
+    marker.style.left = xPct+'%';
+    marker.style.top = yPct+'%';
+    offsetPct.x = xPct - 50;
+    offsetPct.y = yPct - 50;
+  };
+
+  document.getElementById('btnAddGaleria').onclick = ()=>{
+    let baseAz = dirExif;
+    if(baseAz === null){
+      baseAz = Number(document.getElementById('azimutManual').value);
+    }
+    // corrección angular por desviación del punto marcado respecto al centro óptico
+    const anguloOffset = (offsetPct.x/50) * (fovH/2);
+    const azimutCorregido = (baseAz + anguloOffset + 360) % 360;
+    const imgEl = imgWrap.querySelector('img');
+    const c = document.createElement('canvas');
+    c.width = imgEl.naturalWidth; c.height = imgEl.naturalHeight;
+    const ctx = c.getContext('2d');
+    ctx.drawImage(imgEl, 0, 0);
+    const mx = c.width*((offsetPct.x+50)/100), my = c.height*((offsetPct.y+50)/100);
+    ctx.strokeStyle = '#06b6d4'; ctx.lineWidth = c.width*0.006;
+    ctx.beginPath(); ctx.arc(mx, my, c.width*0.02, 0, Math.PI*2); ctx.stroke();
+    const foto = comprimirCanvas(c, 480);
+    capturas.push({
+      id: Date.now(),
+      lat, lon,
+      azimut: azimutCorregido,
+      fuente: dirExif!==null ? 'galería (EXIF+marca)' : 'galería (manual+marca)',
+      precision: dirExif!==null ? 'media' : 'baja',
+      foto
+    });
+    guardarCapturas();
+    refrescarTodo();
+    document.getElementById('galeriaPreview').innerHTML = '<p class="muted">Toma añadida. Puedes importar otra foto.</p>';
+    document.querySelector('nav button[data-tab="resultados"]').click();
+  };
+}
+
+// ---------- LISTA / MAPA / TRIANGULACIÓN ----------
+function refrescarTodo(){
+  document.getElementById('countBadge').textContent = capturas.length+' tomas';
+  const cont = document.getElementById('listaCapturas');
+  if(capturas.length===0){
+    cont.innerHTML = '<p class="muted">Aún no hay tomas.</p>';
+  } else {
+    cont.innerHTML = capturas.map(c=>`
+      <div class="captItem">
+        ${c.foto ? `<img src="${c.foto}" style="width:44px;height:44px;object-fit:cover;border-radius:6px;margin-right:10px;">` : ''}
+        <div style="flex:1;">
+          <div>${c.lat.toFixed(5)}, ${c.lon.toFixed(5)} · ${c.azimut.toFixed(0)}°</div>
+          <div class="muted">${c.fuente}</div>
+        </div>
+        <div class="del" data-id="${c.id}">Eliminar</div>
+      </div>
+    `).join('');
+    cont.querySelectorAll('.del').forEach(el=>{
+      el.onclick = ()=>{
+        capturas = capturas.filter(c=>c.id != el.dataset.id);
+        guardarCapturas();
+        refrescarTodo();
+      };
+    });
+  }
+  dibujarMapa();
+}
+
+function initMap(){
+  map = L.map('map', {zoomControl:false}).setView([40.0,-4.0], 5);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(map);
+  capturasLayer.addTo(map);
+  resultLayer.addTo(map);
+}
+
+function destPoint(lat, lon, bearingDeg, distM){
+  const R=6371000, br = bearingDeg*Math.PI/180;
+  const lat1 = lat*Math.PI/180, lon1 = lon*Math.PI/180;
+  const lat2 = Math.asin(Math.sin(lat1)*Math.cos(distM/R) + Math.cos(lat1)*Math.sin(distM/R)*Math.cos(br));
+  const lon2 = lon1 + Math.atan2(Math.sin(br)*Math.sin(distM/R)*Math.cos(lat1), Math.cos(distM/R)-Math.sin(lat1)*Math.sin(lat2));
+  return [lat2*180/Math.PI, lon2*180/Math.PI];
+}
+
+function dibujarMapa(){
+  capturasLayer.clearLayers();
+  if(capturas.length===0) return;
+  const bounds = [];
+  capturas.forEach(c=>{
+    L.circleMarker([c.lat,c.lon],{radius:6,color:'#06b6d4',fillColor:'#06b6d4',fillOpacity:.9}).addTo(capturasLayer);
+    const end = destPoint(c.lat, c.lon, c.azimut, 300);
+    L.polyline([[c.lat,c.lon], end],{color:'#ef4444',weight:2,dashArray:'4,4'}).addTo(capturasLayer);
+    bounds.push([c.lat,c.lon]);
+  });
+  if(bounds.length===1) map.setView(bounds[0], 15);
+  else map.fitBounds(bounds, {padding:[30,30]});
+}
+
+// Motor de triangulación por mínimos cuadrados (mismo método que el prototipo original)
+function calcularPuntoObjetivo(caps){
+  const latRef = caps[0].lat, lonRef = caps[0].lon;
+  let a11=0,a12=0,a22=0,c1=0,c2=0;
+  caps.forEach(c=>{
+    const dLat = (c.lat-latRef)*(Math.PI/180)*6371000;
+    const dLon = (c.lon-lonRef)*(Math.PI/180)*6371000*Math.cos(latRef*Math.PI/180);
+    const azRad = c.azimut*Math.PI/180;
+    const a = Math.cos(azRad), b = -Math.sin(azRad);
+    const valC = a*dLon + b*dLat;
+    a11+=a*a; a12+=a*b; a22+=b*b; c1+=a*valC; c2+=b*valC;
+  });
+  const det = a11*a22 - a12*a12;
+  if(Math.abs(det) < 1e-9) return null;
+  const xEst = (a22*c1 - a12*c2)/det;
+  const yEst = (-a12*c1 + a11*c2)/det;
+  const latFinal = latRef + (yEst/6371000)*(180/Math.PI);
+  const lonFinal = lonRef + (xEst/(6371000*Math.cos(latRef*Math.PI/180)))*(180/Math.PI);
+  return {lat:latFinal, lon:lonFinal};
+}
+
+function renderHistorial(){
+  const cont = document.getElementById('listaHistorial');
+  if(!cont) return;
+  if(historial.length===0){
+    cont.innerHTML = '<p class="muted">Aún no has calculado ningún punto.</p>';
+    return;
+  }
+  cont.innerHTML = historial.slice().reverse().map(h=>{
+    const fecha = new Date(h.timestamp).toLocaleString('es-ES');
+    const fotos = h.capturas.filter(c=>c.foto).map(c=>`<img src="${c.foto}" style="width:52px;height:52px;object-fit:cover;border-radius:6px;">`).join('');
+    return `
+      <div style="padding:12px 0;border-bottom:1px solid #223354;">
+        <div class="muted">${fecha} · ${h.numCapturas} tomas</div>
+        <div style="font-weight:700;color:var(--accent2);margin:4px 0;">${h.lat.toFixed(6)}, ${h.lon.toFixed(6)}</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin:6px 0;">${fotos}</div>
+        <div style="display:flex;gap:14px;">
+          <a class="maplink" target="_blank" href="https://www.google.com/maps?q=${h.lat},${h.lon}">Abrir en Google Maps →</a>
+          <span class="del" data-hid="${h.id}" style="cursor:pointer;">Eliminar</span>
+        </div>
+      </div>
+    `;
+  }).join('');
+  cont.querySelectorAll('.del').forEach(el=>{
+    el.onclick = ()=>{
+      historial = historial.filter(h=>h.id != el.dataset.hid);
+      guardarHistorial();
+      renderHistorial();
+    };
+  });
+}
+
+document.getElementById('btnTriangular').onclick = ()=>{
+  const box = document.getElementById('resultado');
+  if(capturas.length < 2){
+    box.innerHTML = '<p class="muted" style="color:var(--danger)">Se necesitan al menos 2 tomas con rumbo para triangular.</p>';
+    return;
+  }
+  const r = calcularPuntoObjetivo(capturas);
+  if(!r){
+    box.innerHTML = '<p class="muted" style="color:var(--danger)">Las líneas de visión son casi paralelas: no se puede resolver un punto fiable. Toma fotos desde ángulos más distintos entre sí.</p>';
+    return;
+  }
+  resultLayer.clearLayers();
+  capturasLayer.clearLayers();
+  const bounds = [];
+  capturas.forEach(c=>{
+    L.circleMarker([c.lat,c.lon],{radius:6,color:'#06b6d4',fillColor:'#06b6d4',fillOpacity:.9}).addTo(capturasLayer);
+    L.polyline([[c.lat,c.lon], [r.lat,r.lon]],{color:'#ef4444',weight:2,dashArray:'4,4'}).addTo(capturasLayer);
+    bounds.push([c.lat,c.lon]);
+  });
+  bounds.push([r.lat,r.lon]);
+  L.marker([r.lat,r.lon]).addTo(resultLayer).bindPopup('Punto estimado').openPopup();
+  map.fitBounds(bounds, {padding:[40,40]});
+  box.innerHTML = `
+    <div class="resultBox">
+      <div class="muted">Punto estimado (mínimos cuadrados, ${capturas.length} tomas)</div>
+      <div class="coords">${r.lat.toFixed(6)}, ${r.lon.toFixed(6)}</div>
+      <a class="maplink" target="_blank" href="https://www.google.com/maps?q=${r.lat},${r.lon}">Abrir en Google Maps →</a>
+    </div>
+  `;
+  historial.push({
+    id: Date.now(),
+    timestamp: new Date().toISOString(),
+    lat: r.lat, lon: r.lon,
+    numCapturas: capturas.length,
+    capturas: capturas.map(c=>({lat:c.lat, lon:c.lon, azimut:c.azimut, fuente:c.fuente, foto:c.foto}))
+  });
+  guardarHistorial();
+  renderHistorial();
+};
+
+// ---------- INIT ----------
+initCamera();
+watchGPS();
+initMap();
+cargarCapturas();
+cargarHistorial();
+
+if('serviceWorker' in navigator){
+  window.addEventListener('load', ()=>{
+    navigator.serviceWorker.register('sw.js').catch(e=>console.error('SW error:', e));
+  });
+}
+</script>
+</body>
+</html>

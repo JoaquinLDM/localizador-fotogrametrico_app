@@ -1,4 +1,4 @@
-const CACHE = 'localizador-v1';
+const CACHE = 'localizador-v2';
 const ASSETS = [
   './index.html',
   './manifest.json',
