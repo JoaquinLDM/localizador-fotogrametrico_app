@@ -73,6 +73,10 @@
 </head>
 <body>
 <div id="app">
+  <div id="updateBanner" style="display:none;position:fixed;bottom:0;left:0;right:0;z-index:999;background:var(--accent);color:#04222b;padding:12px 16px;align-items:center;justify-content:space-between;gap:10px;font-size:13px;font-weight:600;">
+    <span>Hay una versión nueva de la app.</span>
+    <button id="btnAplicarUpdate" style="background:#04222b;color:var(--accent2);border:none;border-radius:8px;padding:8px 14px;font-weight:700;">Actualizar ahora</button>
+  </div>
   <header>
     <h1>📍 Localizador <span>Fotogramétrico</span></h1>
     <span class="badge" id="countBadge">0 tomas</span>
@@ -518,6 +522,50 @@ function calcularPuntoObjetivo(caps){
   return {lat:latFinal, lon:lonFinal};
 }
 
+function generarInformeHTML(h){
+  const fecha = new Date(h.timestamp).toLocaleString('es-ES');
+  const filasFotos = h.capturas.map((c,i)=>`
+    <div style="margin:16px 0;padding:14px;background:#152238;border-radius:10px;border:1px solid #223354;">
+      <div style="font-weight:700;color:#22d3ee;">Toma ${i+1} — ${c.fuente}</div>
+      <div>Coordenadas: ${c.lat.toFixed(6)}, ${c.lon.toFixed(6)}</div>
+      <div>Azimut: ${c.azimut.toFixed(1)}°</div>
+      ${c.foto ? `<img src="${c.foto}" style="max-width:100%;border-radius:8px;margin-top:8px;">` : '<div style="color:#7c8ba1;">Sin foto guardada</div>'}
+    </div>
+  `).join('');
+  return `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
+  <title>Informe localizador — ${fecha}</title>
+  <style>
+    body{background:#0f172a;color:#e2e8f0;font-family:-apple-system,Roboto,Segoe UI,sans-serif;margin:0;padding:20px;}
+    h1{color:#22d3ee;font-size:20px;}
+    a{color:#22d3ee;}
+    .resumen{background:linear-gradient(135deg,#0e3a45,#0f2942);border:1px solid #06b6d4;border-radius:12px;padding:18px;margin-bottom:20px;}
+    .coords{font-size:20px;font-weight:700;color:#22d3ee;}
+  </style></head><body>
+  <h1>📍 Informe de localización</h1>
+  <div class="resumen">
+    <div>${fecha} · ${h.numCapturas} tomas · triangulación por mínimos cuadrados</div>
+    <div class="coords">${h.lat.toFixed(6)}, ${h.lon.toFixed(6)}</div>
+    <a target="_blank" href="https://www.google.com/maps?q=${h.lat},${h.lon}">Abrir en Google Maps →</a>
+  </div>
+  <h2 style="color:#e2e8f0;font-size:15px;">Tomas de referencia</h2>
+  ${filasFotos}
+  </body></html>`;
+}
+
+function exportarResultado(h){
+  const html = generarInformeHTML(h);
+  const blob = new Blob([html], {type:'text/html'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const fecha = new Date(h.timestamp).toISOString().slice(0,16).replace(/[:T]/g,'-');
+  a.href = url;
+  a.download = `localizador-${fecha}.html`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(()=>URL.revokeObjectURL(url), 5000);
+}
+
 function renderHistorial(){
   const cont = document.getElementById('listaHistorial');
   if(!cont) return;
@@ -533,8 +581,9 @@ function renderHistorial(){
         <div class="muted">${fecha} · ${h.numCapturas} tomas</div>
         <div style="font-weight:700;color:var(--accent2);margin:4px 0;">${h.lat.toFixed(6)}, ${h.lon.toFixed(6)}</div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin:6px 0;">${fotos}</div>
-        <div style="display:flex;gap:14px;">
+        <div style="display:flex;gap:14px;flex-wrap:wrap;">
           <a class="maplink" target="_blank" href="https://www.google.com/maps?q=${h.lat},${h.lon}">Abrir en Google Maps →</a>
+          <span class="maplink" data-exp="${h.id}" style="cursor:pointer;">Exportar ⬇</span>
           <span class="del" data-hid="${h.id}" style="cursor:pointer;">Eliminar</span>
         </div>
       </div>
@@ -545,6 +594,12 @@ function renderHistorial(){
       historial = historial.filter(h=>h.id != el.dataset.hid);
       guardarHistorial();
       renderHistorial();
+    };
+  });
+  cont.querySelectorAll('[data-exp]').forEach(el=>{
+    el.onclick = ()=>{
+      const h = historial.find(x=>x.id == el.dataset.exp);
+      if(h) exportarResultado(h);
     };
   });
 }
@@ -597,9 +652,31 @@ cargarCapturas();
 cargarHistorial();
 
 if('serviceWorker' in navigator){
-  window.addEventListener('load', ()=>{
-    navigator.serviceWorker.register('sw.js').catch(e=>console.error('SW error:', e));
+  window.addEventListener('load', async ()=>{
+    try{
+      const reg = await navigator.serviceWorker.register('sw.js');
+      reg.update();
+      reg.addEventListener('updatefound', ()=>{
+        const nuevo = reg.installing;
+        if(!nuevo) return;
+        nuevo.addEventListener('statechange', ()=>{
+          if(nuevo.state === 'installed' && navigator.serviceWorker.controller){
+            // Hay versión nueva lista: avisamos, NO recargamos solos.
+            // Así no se pierde ninguna marca en curso sobre una foto de galería
+            // que aún no se haya pulsado "Añadir esta toma".
+            const banner = document.getElementById('updateBanner');
+            banner.style.display = 'flex';
+          }
+        });
+      });
+      document.addEventListener('visibilitychange', ()=>{
+        if(!document.hidden) reg.update();
+      });
+    }catch(e){ console.error('SW error:', e); }
   });
+  document.getElementById('btnAplicarUpdate').onclick = ()=>{
+    window.location.reload();
+  };
 }
 </script>
 </body>

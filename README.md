@@ -25,9 +25,20 @@ No requiere servidor propio ni Termux: al estar en HTTPS real, Chrome trata el o
 - Con fotos de galería sin `GPSImgDirection`, el rumbo introducido a mano es una estimación, no una medición — trátalo como orientativo.
 - Recomendado: mínimo 3 tomas desde ángulos bien separados (nunca casi en línea recta) para que el error de una toma puntual no arrastre todo el resultado.
 
-## Almacenamiento
+## Dónde se guarda tu trabajo
 
-Las tomas y el histórico de resultados se guardan en `localStorage`, local al navegador/dispositivo. No hay sincronización entre dispositivos ni copia en la nube — si necesitas conservar resultados a largo plazo, expórtalos manualmente (captura de pantalla o anota las coordenadas) antes de borrar datos del navegador.
+Todo lo que capturas (tomas y resultados calculados) se guarda **automáticamente**, sin que tengas que pulsar nada, en el `localStorage` del navegador. Esto tiene implicaciones importantes que conviene entender:
+
+- **No es una carpeta ni un archivo del teléfono.** Vive dentro del almacenamiento interno de la app de Chrome (o del navegador que uses), asociado exclusivamente a esta URL exacta (`https://tuusuario.github.io/localizador-app/`). No lo vas a encontrar navegando con un gestor de archivos — no es un `.txt`, `.db` ni nada abrible directamente.
+- **Es local a ese navegador y ese dispositivo.** Si abres la misma URL desde otro móvil, otro navegador (Firefox, Samsung Internet...), o una pestaña de incógnito, no verás nada de lo guardado — cada combinación navegador+dispositivo tiene su propio almacenamiento independiente.
+- **Se borra si limpias datos del navegador.** Concretamente, si en Chrome vas a Configuración → Privacidad → Borrar datos de navegación y marcas "Cookies y datos de sitios" (no solo caché), o si entras en `chrome://settings/content/all` → buscas el dominio → "Borrar y restablecer", se pierde todo lo guardado sin posibilidad de recuperarlo.
+- **No hay copia en la nube ni sincronización entre dispositivos.** Es solo del navegador local.
+
+### Cómo sacar tu trabajo de ahí, a un archivo de verdad
+
+En la pestaña **Resultados**, cada punto calculado tiene un botón **"Exportar ⬇"**. Genera un archivo `.html` autocontenido (coordenadas + fotos + fecha, todo en un único archivo, abrible sin conexión con cualquier navegador) y lo descarga a la carpeta **Download/Descargas** estándar del teléfono — esa sí es una carpeta real, visible desde cualquier gestor de archivos, que puedes mover, compartir o respaldar como cualquier otro archivo.
+
+**Recomendación práctica:** trata el `localStorage` como una libreta de trabajo temporal mientras estás en el campo, y usa "Exportar" en cuanto termines cada punto que quieras conservar de verdad — no confíes en el guardado automático como archivo permanente a largo plazo.
 
 ## Stack técnico
 
