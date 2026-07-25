@@ -95,6 +95,7 @@
         <canvas id="captureCanvas"></canvas>
         <div class="hud">
           <div>Azimut: <b id="hudAz">esperando…</b></div>
+          <div id="hudCalibra" class="muted" style="display:none;">🧭 Mueve el móvil trazando un 8 en el aire para calibrar la brújula</div>
           <div>Lat: <b id="hudLat">…</b> · Lon: <b id="hudLon">…</b></div>
           <div id="hudWarnCam" class="muted" style="color:#f87171;"></div>
           <div id="hudWarnGps" class="muted"></div>
@@ -290,6 +291,7 @@ function handleOrientation(e){
   if(heading !== null){
     currentHeading = (heading + 360) % 360;
     document.getElementById('hudAz').textContent = currentHeading.toFixed(1)+'°';
+    document.getElementById('hudCalibra').style.display = 'none';
   }
 }
 window.addEventListener('deviceorientationabsolute', handleOrientation, true);
@@ -651,6 +653,12 @@ initMap();
 cargarCapturas();
 cargarHistorial();
 
+setTimeout(()=>{
+  if(currentHeading === null){
+    document.getElementById('hudCalibra').style.display = 'block';
+  }
+}, 4000);
+
 if('serviceWorker' in navigator){
   window.addEventListener('load', async ()=>{
     try{
@@ -666,6 +674,7 @@ if('serviceWorker' in navigator){
             // que aún no se haya pulsado "Añadir esta toma".
             const banner = document.getElementById('updateBanner');
             banner.style.display = 'flex';
+            setTimeout(()=>{ banner.style.display = 'none'; }, 9000);
           }
         });
       });
